@@ -17,6 +17,19 @@ import animation_scaler  # Import the animation_scaler module
 # Global variable to keep track of whether animation_scaler has been registered
 animation_scaler_registered = False
 
+def get_compass_angle(direction):
+    compass_directions = {
+        "N": 0,
+        "NE": 45,
+        "E": 90,
+        "SE": 135,
+        "S": 180,
+        "SW": 225,
+        "W": 270,
+        "NW": 315
+    }
+    return compass_directions.get(direction, 0)
+
 class ParentRigOperator(bpy.types.Operator):
     """Tooltip"""
     bl_idname = "object.parent_rig_operator"
@@ -58,8 +71,13 @@ class ParentRigOperator(bpy.types.Operator):
             if anim:  # Check if an animation is selected
                 track.name = anim  # Set the track's name
                 angle = 0
-                for j in range(num_faces):
-                    angle = j * (360 / context.scene.num_faces)
+                compass_direction = getattr(context.scene, f"compass_direction_{i}")
+                if compass_direction == "All":
+                    for j in range(num_faces):
+                        angle = j * (360 / context.scene.num_faces)
+                        end_frame = self.rotate_and_repeat_animation(context, rig, angle, anim, rotation_direction, start_frame, track)
+                else:
+                    angle = get_compass_angle(compass_direction)
                     end_frame = self.rotate_and_repeat_animation(context, rig, angle, anim, rotation_direction, start_frame, track)
 
                 # Add the animation info to the INI text
@@ -74,7 +92,7 @@ class ParentRigOperator(bpy.types.Operator):
                     ini_text += f"{ini_entry}={frame_count}\n"
                     ini_text += f"Start{ini_entry}={start_frame}\n"
                 # Update the start frame for the next animation
- 
+
                 start_frame = end_frame + 1  # Always increment the start frame by 1
                 if frame_count > 1:
                     start_frame -= 2  # Subtract 2 from the start frame if frame_count is greater than 1
@@ -146,6 +164,25 @@ class AddAnimationOperator(bpy.types.Operator):
         bpy.context.scene.frame_end = end_frame
         return {'FINISHED'}
 
+class RotateKeyframeOperator(bpy.types.Operator):
+    """Rotate selected object"""
+    bl_idname = "object.rotate_keyframe_operator"
+    bl_label = "Rotate"
+
+    def execute(self, context):
+        obj = context.object  # Get the selected object
+        num_faces = context.scene.rotation_faces
+        rotation_direction = context.scene.rotation_direction
+
+        angle_increment = 360 / num_faces
+
+        for i in range(num_faces):
+            angle = i * angle_increment
+            obj.rotation_euler.z = -math.radians(angle) if rotation_direction == "CW" else math.radians(angle)
+            obj.keyframe_insert(data_path="rotation_euler", frame=i+1)
+
+        return {'FINISHED'}
+
 class ANIM_PT_my_panel(bpy.types.Panel):
     bl_idname = "ANIM_PT_my_panel"
     bl_label = "C&C Anim Addon"
@@ -175,6 +212,7 @@ class ANIM_PT_my_panel(bpy.types.Panel):
                 row.prop(context.scene, f"ini_entry_cw_{i}", text="")
             else:
                 row.prop(context.scene, f"ini_entry_ccw_{i}", text="")
+            row.prop(context.scene, f"compass_direction_{i}", text="")
 
         # Add UI elements for specifying the number of faces
         layout.label(text="Number of Facings:")
@@ -186,9 +224,15 @@ class ANIM_PT_my_panel(bpy.types.Panel):
 
         layout.operator("object.parent_rig_operator")
 
+        # Add UI elements for keyframe rotation
+        layout.label(text="Rotate selected object")
+        layout.prop(context.scene, "rotation_faces", text="Rotation Facings")
+        layout.operator("object.rotate_keyframe_operator")
+
 def register():
     bpy.utils.register_class(ParentRigOperator)
     bpy.utils.register_class(AddAnimationOperator)
+    bpy.utils.register_class(RotateKeyframeOperator)
     animation_scaler.register()  # Register the animation_scaler
     bpy.utils.register_class(ANIM_PT_my_panel)
 
@@ -198,6 +242,7 @@ def register():
     bpy.types.Scene.rotation_direction = bpy.props.EnumProperty(name="Rotation Direction", items=[("CW", "Clockwise (vehicles)", ""), ("CCW", "CounterClockwise (infantry)", "")])
     bpy.types.Scene.scale_animation = bpy.props.StringProperty(name="Scale Animation")  # New property
     bpy.types.Scene.scale_num_frames = bpy.props.IntProperty(name="Scale Num Frames", default=1, min=1)  # New property
+    bpy.types.Scene.rotation_faces = bpy.props.IntProperty(name="Rotation Facings", default=8, min=1, max=32)  # New property for keyframe rotation
     for i in range(1, 21):  # Create 20 animation selection properties
         setattr(bpy.types.Scene, f"animation_{i}", bpy.props.StringProperty(name=f"Animation {i}"))
         setattr(bpy.types.Scene, f"frame_count_{i}", bpy.props.IntProperty(name=f"Frame Count {i}"))  # Add a new property for the frame count
@@ -249,10 +294,26 @@ def register():
             name=f"INI Entries (Infantry) {i}",
             default="Ready" if i == 1 else "Guard" if i == 2 else "Walk" if i == 3 else "Idle1" if i == 4 else "Idle2" if i == 5 else "Prone" if i == 6 else "Crawl"  # Set the default value
         ))
+        setattr(bpy.types.Scene, f"compass_direction_{i}", bpy.props.EnumProperty(
+            items=[
+                ("All", "All", ""),
+                ("N", "North", ""),
+                ("NE", "Northeast", ""),
+                ("E", "East", ""),
+                ("SE", "Southeast", ""),
+                ("S", "South", ""),
+                ("SW", "Southwest", ""),
+                ("W", "West", ""),
+                ("NW", "Northwest", "")
+            ],
+            name=f"Compass Direction {i}",
+            default="All"  # Set the default value
+        ))
 
 def unregister():
     bpy.utils.unregister_class(ParentRigOperator)
     bpy.utils.unregister_class(AddAnimationOperator)
+    bpy.utils.unregister_class(RotateKeyframeOperator)
     animation_scaler.unregister()  # Unregister the animation_scaler
     bpy.utils.unregister_class(ANIM_PT_my_panel)
 
@@ -262,11 +323,13 @@ def unregister():
     del bpy.types.Scene.rotation_direction
     del bpy.types.Scene.scale_animation  # Delete the new property
     del bpy.types.Scene.scale_num_frames  # Delete the new property
+    del bpy.types.Scene.rotation_faces  # Delete the keyframe rotation property
     for i in range(1, 21):  # Delete 20 animation selection properties
         delattr(bpy.types.Scene, f"animation_{i}")
         delattr(bpy.types.Scene, f"frame_count_{i}")  # Delete the frame count property
         delattr(bpy.types.Scene, f"ini_entry_cw_{i}")
         delattr(bpy.types.Scene, f"ini_entry_ccw_{i}")
+        delattr(bpy.types.Scene, f"compass_direction_{i}")
 
 if __name__ == "__main__":
     register()
