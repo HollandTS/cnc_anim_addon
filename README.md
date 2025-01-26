@@ -2,7 +2,7 @@ This is a blender addon for if you have a model ready with animations, to make a
 
 This addon is created for creating sprites for the game Red Alert 2 and Tiberian Sun, but it might be usefull for other purposes.
 
-I used chatGPT to create this addon, its not perfect but gets the job done alot faster then manually creating an empty and rotating the animations occordingly.
+I used chatGPT to create this addon. Created this to help with unit creating workflow, it gets the job done alot faster then manually creating an empty and rotating the animations occordingly.
 
 Updated Preview pic:
 ![2025-01-26 12_53_36-_ bison_mech_addontesting  F__tibsun shit_blendah files_bison_mech_addontesting](https://github.com/user-attachments/assets/05d2f616-f572-4aaa-85ec-e9b48319fa14)
