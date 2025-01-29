@@ -100,7 +100,10 @@ def handle_fire_secondary_prone(data, added_keys):
 def handle_idle_keys(data, added_keys):
     if "Idle1" in data:
         idle1_values = data["Idle1"].split(",")
-        data["Idle1"] = f"{idle1_values[0]},{idle1_values[1]},0,E"
+        # Only append "E" if the compass direction is not already defined
+        if len(idle1_values) < 4:
+            idle1_values.append("E")
+        data["Idle1"] = ",".join(idle1_values)
     if "Idle2" not in data and "Idle1" in data:
         idle1_values = data["Idle1"].split(",")
         data["Idle2"] = f"{idle1_values[0]},{idle1_values[1]},0,W"

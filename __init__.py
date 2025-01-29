@@ -14,7 +14,7 @@ import bpy
 from .ini_writer import ParentRigOperator
 from .rotate_keyframe import RotateKeyframeOperator
 from .animation_scaler import ScaleAnimationOperator
-from .mesh_creator import create_circle_arrow_mesh
+from .action_cutter import PoseKeys2ActionProperties, CreateNewActionOperator, RemoveInBetweenKeysOperator, register_misc_tools_property
 
 class AddAnimationOperator(bpy.types.Operator):
     """Tooltip"""
@@ -28,6 +28,35 @@ class AddAnimationOperator(bpy.types.Operator):
         context.scene.frame_start = 0
         context.scene.frame_end = 0  # This will be dynamically updated during execution
 
+        return {'FINISHED'}
+
+class UndoExecutionOperator(bpy.types.Operator):
+    """Operator to undo the execution and remove created strips and parent object."""
+    bl_idname = "object.undo_execution"
+    bl_label = "Remove"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        obj = context.object
+
+        # Set the playhead to frame 0
+        context.scene.frame_current = 0
+
+        if obj and obj.type == 'ARMATURE':
+            anim_data = obj.animation_data
+            if anim_data:
+                # Remove all NLA strips
+                for track in anim_data.nla_tracks:
+                    anim_data.nla_tracks.remove(track)
+                
+                # Remove the parent object
+                if obj.parent and obj.parent.name.startswith("CircleArrow"):
+                    bpy.data.objects.remove(obj.parent, do_unlink=True)
+
+                # Clear the parent relationship
+                obj.parent = None
+
+        self.report({'INFO'}, "Execution undone successfully!")
         return {'FINISHED'}
 
 class ANIM_PT_my_panel(bpy.types.Panel):
@@ -81,6 +110,12 @@ class ANIM_PT_my_panel(bpy.types.Panel):
         row.scale_y = 1.5  # Make the button taller
         row.operator("object.parent_rig_operator")
 
+        # Undo Execution section
+        box = layout.box()
+        row = box.row(align=True)
+        row.label(text="Undo execution:")
+        row.operator("object.undo_execution", text="Remove", icon='CANCEL')
+
         # Section for keyframe rotation
         box = layout.box()
         box.label(text="Rotate selected object")
@@ -88,20 +123,42 @@ class ANIM_PT_my_panel(bpy.types.Panel):
         box.prop(context.scene, "skip_frames", text="Skip Frames")  # Add Skip Frames slider
         box.operator("object.rotate_keyframe_operator")
 
+        # Misc Tools Section
+        box = layout.box()
+        box.label(text="Misc Tools")
+        box.prop(context.scene, "show_misc_tools", icon="TRIA_DOWN" if context.scene.show_misc_tools else "TRIA_RIGHT", emboss=False)
+        if context.scene.show_misc_tools:
+            box.label(text="Create new action from selected keys (in Pose Mode):")
+            props = context.scene.pose_keys_to_action_props
+            box.prop(props, "action_name", text="Action Name")
+            box.operator("pose.create_new_action", text="Create New Action")
+
+            # Separator for visual separation
+            box.separator()
+            box.operator("pose.remove_in_between_keys", text="Remove In-between Keys")
+            box.label(text="Removing excess data from external 3D tools can boost performance.")
+
 def register():
     bpy.utils.register_class(ParentRigOperator)
     bpy.utils.register_class(AddAnimationOperator)
     bpy.utils.register_class(RotateKeyframeOperator)
     bpy.utils.register_class(ScaleAnimationOperator)
+    bpy.utils.register_class(UndoExecutionOperator)
     bpy.utils.register_class(ANIM_PT_my_panel)
+    bpy.utils.register_class(PoseKeys2ActionProperties)
+    bpy.utils.register_class(CreateNewActionOperator)
+    bpy.utils.register_class(RemoveInBetweenKeysOperator)
+    register_misc_tools_property()
+    bpy.types.Scene.pose_keys_to_action_props = bpy.props.PointerProperty(
+        type=PoseKeys2ActionProperties
+    )
 
     # Define the properties
     bpy.types.Scene.num_faces = bpy.props.IntProperty(name="Number of Faces", default=8, min=1, max=32)
     bpy.types.Scene.num_animations = bpy.props.IntProperty(name="Number of Animations", default=10, min=1)  # New property
     bpy.types.Scene.rotation_direction = bpy.props.EnumProperty(
         name="Rotation Direction",
-        items=[("CW", "Clockwise (vehicles)", ""), ("CCW", "CounterClockwise (infantry)", "")],
-        update=lambda self, context: update_rotation_direction(context)  # Add update function
+        items=[("CW", "Clockwise (vehicles)", ""), ("CCW", "CounterClockwise (infantry)", "")]
     )
     bpy.types.Scene.scale_animation = bpy.props.StringProperty(name="Scale Animation")  # New property
     bpy.types.Scene.scale_num_frames = bpy.props.IntProperty(name="Scale Num Frames", default=1, min=1)  # New property
@@ -183,7 +240,13 @@ def unregister():
     bpy.utils.unregister_class(AddAnimationOperator)
     bpy.utils.unregister_class(RotateKeyframeOperator)
     bpy.utils.unregister_class(ScaleAnimationOperator)
+    bpy.utils.unregister_class(UndoExecutionOperator)
     bpy.utils.unregister_class(ANIM_PT_my_panel)
+    bpy.utils.unregister_class(PoseKeys2ActionProperties)
+    bpy.utils.unregister_class(CreateNewActionOperator)
+    bpy.utils.unregister_class(RemoveInBetweenKeysOperator)
+    del bpy.types.Scene.pose_keys_to_action_props
+    del bpy.types.Scene.show_misc_tools
 
     # Delete the properties
     del bpy.types.Scene.num_faces
